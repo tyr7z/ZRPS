@@ -1,9 +1,9 @@
-export const prefix = '/api';
+export const prefix = "/api";
 
 async function routes(app) {
-    app.get('/', () => {
+    app.get("/", () => {
         return {
-            status: 'success'
+            status: "success",
         };
     });
 }

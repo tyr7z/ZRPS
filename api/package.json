@@ -9,14 +9,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JamzOhJamz/ZRprivateServer.git"
+    "url": "git+https://github.com/tyr7z/ZRPS.git"
   },
-  "author": "JamzOhJamz",
+  "author": "tyr7z",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/JamzOhJamz/ZRprivateServer/issues"
+    "url": "https://github.com/tyr7z/ZRPS/issues"
   },
-  "homepage": "https://github.com/JamzOhJamz/ZRprivateServer#readme",
+  "homepage": "https://github.com/tyr7z/ZRPS#readme",
   "dependencies": {
     "@fastify/cookie": "^8.3.0",
     "@fastify/cors": "^8.2.1",
