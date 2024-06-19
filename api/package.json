@@ -1,0 +1,43 @@
+{
+  "name": "zrprivateserver-api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JamzOhJamz/ZRprivateServer.git"
+  },
+  "author": "JamzOhJamz",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/JamzOhJamz/ZRprivateServer/issues"
+  },
+  "homepage": "https://github.com/JamzOhJamz/ZRprivateServer#readme",
+  "dependencies": {
+    "@fastify/cookie": "^8.3.0",
+    "@fastify/cors": "^8.2.1",
+    "@fastify/formbody": "^7.4.0",
+    "@fastify/mysql": "^4.1.0",
+    "@fastify/static": "^6.10.1",
+    "@fastify/view": "^7.4.1",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.0.3",
+    "fastify": "^4.15.0",
+    "hcaptcha": "^0.1.1",
+    "node-fetch": "^3.3.1",
+    "pug": "^3.0.2"
+  },
+  "devDependencies": {
+    "eslint": "^8.38.0",
+    "eslint-config-semistandard": "^17.0.0",
+    "eslint-config-standard": "^17.0.0",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-n": "^15.7.0",
+    "eslint-plugin-promise": "^6.1.1",
+    "nodemon": "^2.0.22"
+  }
+}
