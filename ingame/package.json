@@ -11,7 +11,8 @@
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.0.3",
-    "mysql2": "^3.2.3"
+    "mysql2": "^3.2.3",
+    "ws": "^8.17.1"
   },
   "devDependencies": {
     "eslint": "^8.38.0",

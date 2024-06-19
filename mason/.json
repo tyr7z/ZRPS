@@ -1,0 +1,18 @@
+{
+    version: 713,
+    mode: "Solo",
+    status: "Lobby",
+    players: 1,
+    ipv4: "95.179.140.31",
+    ipv6: "2a05:f480:1400:2575::",
+    enabled: true,
+    proxyIndex: 23,
+    hostname: "zr-5fb38c1f-23.eggs.gg",
+    hostnameV4: "zr-5fb38c1f-23-v4.eggs.gg",
+    endpoint: "zr-5fb38c1f-23-0-0-8612514270-7974f0b8e1f21b77cebf",
+    endpoints: null,
+    hostnames: null,
+    hostnamesV4: null,
+    discreteFourierTransformBias: 13,
+    id: ""
+}

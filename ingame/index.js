@@ -1,9 +1,7 @@
 // Import the necessary modules
-import http from "http";
-import Socketio from "socket.io";
+import { WebSocketServer } from "ws";
 import mysql from "mysql2/promise";
 import * as dotenv from "dotenv";
-import { generatePartyKey, hashPlayerIp } from "./utils.js";
 
 // Load environment config
 dotenv.config();
@@ -25,30 +23,37 @@ if (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED?.toLowerCase() === "true") {
 }
 const pool = mysql.createPool(mysqlOptions);
 
-let socket = new WebSocket("wss://localhost:3003/");
+const wss = new WebSocketServer({ port: 41234 });
 
-socket.onopen = function (e) {
-    alert("[open] Connection established");
-    alert("Sending to server");
-    socket.send("My name is John");
-};
+wss.on("connection", function connection(ws) {
+    ws.on("error", console.error);
 
-socket.onmessage = function (event) {
-    alert(`[message] Data received from server: ${event.data}`);
-};
+    ws.on("message", function message(data) {
+        console.log("received: %s", data);
+    });
 
-socket.onclose = function (event) {
-    if (event.wasClean) {
-        alert(
-            `[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`
-        );
-    } else {
-        // e.g. server process killed or network down
-        // event.code is usually 1006 in this case
-        alert("[close] Connection died");
-    }
-};
+    ws.send("something");
+});
 
-socket.onerror = function (error) {
-    alert(`[error]`);
-};
+// import dgram from "dgram";
+// const server = dgram.createSocket("udp4");
+
+// server.on("error", (err) => {
+//     console.error(`server error:\n${err.stack}`);
+//     server.close();
+// });
+
+// server.on("message", (msg, rinfo) => {
+//     console.log(`server got: ${msg} from ${rinfo.address}:${rinfo.port}`);
+// });
+
+// server.on("listening", () => {
+//     const address = server.address();
+//     console.log(`server listening ${address.address}:${address.port}`);
+// });
+
+// server.on("connect", (client) => {
+//     console.log(`${client.address}:${client.port} connected!`);
+// });
+
+// server.bind(41234);

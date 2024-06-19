@@ -8,6 +8,25 @@ import { generatePartyKey, hashPlayerIp } from "./utils.js";
 // Load environment config
 dotenv.config();
 
+const gameServerDetails = {
+    version: 700,
+    mode: "Solo",
+    status: "Lobby",
+    players: 1,
+    ipv4: "127.0.0.1:41234",
+    ipv6: "::1",
+    enabled: true,
+    proxyIndex: 23,
+    hostname: "127.0.0.1:41234",
+    hostnameV4: "127.0.0.1:41234",
+    endpoint: "/",
+    endpoints: null,
+    hostnames: null,
+    hostnamesV4: null,
+    discreteFourierTransformBias: 13,
+    id: "",
+};
+
 // Create MySQL pool
 const mysqlOptions = {
     host: process.env.DATABASE_HOST || "127.0.0.1",
@@ -359,8 +378,55 @@ io.on("connection", (socket) => {
         socket.emit("partyAutofillUpdated", autofill);
     });
 
-    socket.on("setReady", (_isReady) => {
-        console.log(_isReady);
+    socket.on("setIsInRound", (isInRound) => {
+        const partyKey = players[socket.id].partyKey;
+        if (partyKey) {
+            const party = parties[partyKey];
+            if (party && party.players) {
+                players[socket.id].inRound = isInRound;
+                const index = party.players.findIndex(
+                    (player) => player.id === socket.id
+                );
+                party.players.at(index).inRound = isInRound;
+                socket.emit("partyPlayerUpdated", party.players.at(index));
+            }
+        }
+    });
+
+    socket.on("restartPartyMatchmaking", () => {
+        // Start matchmaking only if every player of the party is ready
+        const isReady = players[socket.id].ready;
+        if (isReady) {
+            socket.emit("partyStateUpdated", "matchmaking");
+            console.log(gameServerDetails);
+            socket.emit("partyJoinServer", gameServerDetails);
+            socket.emit("partyStateUpdated", "ingame");
+            socket.emit("partyStateUpdated", "waiting");
+        }
+    });
+
+    socket.on("setReady", (isReady) => {
+        const partyKey = players[socket.id].partyKey;
+        if (!partyKey) return;
+        const party = parties[partyKey];
+        if (!party) return;
+        if (party && party.players) {
+            players[socket.id].ready = isReady;
+            const index = party.players.findIndex(
+                (player) => player.id === socket.id
+            );
+            party.players.at(index).ready = isReady;
+            socket.emit("partyPlayerUpdated", party.players.at(index));
+        }
+
+        // Start matchmaking only if every player of the party is ready
+        if (isReady) {
+            socket.emit("partyStateUpdated", "matchmaking");
+            console.log(gameServerDetails);
+            socket.emit("partyJoinServer", gameServerDetails);
+            socket.emit("partyStateUpdated", "ingame");
+            socket.emit("partyStateUpdated", "waiting");
+        }
     });
 
     socket.on("leaveParty", () => {
