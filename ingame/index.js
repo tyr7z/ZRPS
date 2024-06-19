@@ -23,7 +23,7 @@ if (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED?.toLowerCase() === "true") {
 }
 const pool = mysql.createPool(mysqlOptions);
 
-const wss = new WebSocketServer({ port: 41234 });
+const wss = new WebSocketServer({ port: 1234 });
 
 wss.on("connection", function connection(ws) {
     ws.on("error", console.error);
@@ -56,4 +56,4 @@ wss.on("connection", function connection(ws) {
 //     console.log(`${client.address}:${client.port} connected!`);
 // });
 
-// server.bind(41234);
+// server.bind(1234);
