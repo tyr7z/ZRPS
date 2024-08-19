@@ -9,16 +9,16 @@ import { generatePartyKey, hashPlayerIp } from "./utils.js";
 dotenv.config();
 
 const gameServerDetails = {
-    version: 700,
+    version: 736,
     mode: "Solo",
     status: "Lobby",
     players: 1,
-    ipv4: "127.0.0.1:1234",
+    ipv4: "127.0.0.1:3003",
     ipv6: "::1",
     enabled: true,
     proxyIndex: null,
-    hostname: "localhost:1234",
-    hostnameV4: "localhost:1234",
+    hostname: "localhost:3003",
+    hostnameV4: "localhost:3003",
     endpoint: "",
     endpoints: null,
     hostnames: null,
