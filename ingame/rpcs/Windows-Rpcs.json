@@ -1839,12 +1839,12 @@
                     "Offset": 32,
                     "Type": 3,
                     "XFieldName": "IELFDABCLIO",
-                    "FieldName": null
+                    "FieldName": "json"
                 }
             ],
             "XClassName": "IPLHBPLICEN",
             "XParentName": "KHDGFGHPNOH",
-            "ClassName": null,
+            "ClassName": "AccountSessionRpc",
             "ParentName": "InRpc"
         },
         {
