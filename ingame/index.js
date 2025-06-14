@@ -4,7 +4,7 @@ import https from "node:https";
 import { WebSocketServer } from "ws";
 import mysql from "mysql2/promise";
 import * as dotenv from "dotenv";
-import { Codec, PacketId } from "zombslib";
+import { Codec, PacketId, BinaryWriter, BinaryReader } from "zombslib";
 
 import fs from "fs/promises";
 import path from "path";
@@ -43,7 +43,7 @@ const server = https.createServer(serverOptions);
 const wss = new WebSocketServer({ server: server });
 wss.on("connection", (ws, req) => {
     const endpoint = req.url.slice(1);
-    console.log("Client connected with endpoint", endpoint);
+    console.log("Client connected");
 
     let codec = new Codec("../../rpcs/Windows-Rpcs.json");
 
@@ -80,7 +80,7 @@ wss.on("connection", (ws, req) => {
                 const enterWorldResponse = {
                     version: codec.rpcMapping.Codec,
                     allowed: 1,
-                    uid: 226,
+                    uid: 244,
                     startingTick: 10,
                     tickRate: 64,
                     effectiveTickRate: 64,
@@ -175,9 +175,17 @@ wss.on("connection", (ws, req) => {
                                     );
                                 }
                             }
+                            /*
                             ws.send(
                                 codec.encodeRpc("GameStatusRpc", {
                                     status: "Lobby",
+                                    countDownEndsTick: 0,
+                                })
+                            );
+                            */
+                            ws.send(
+                                codec.encodeRpc("GameStatusRpc", {
+                                    status: "Game",
                                     countDownEndsTick: 0,
                                 })
                             );
@@ -194,8 +202,8 @@ wss.on("connection", (ws, req) => {
                                 })
                             );
                             ws.send(
-                                codec.encodeRpc("AccountSessionRpc", {
-                                    json: 0,
+                                codec.encodeRpc("InventoryUpdateEquipRpc", {
+                                    inventorySlot: 0,
                                 })
                             );
                             ws.send(
@@ -320,7 +328,63 @@ wss.on("connection", (ws, req) => {
                                 })
                             );
                             */
+                            codec.decodeEntityUpdate(
+                                new Uint8Array(readFileSync("update-10.txt"))
+                            );
+                            console.log(codec.entityList);
                             ws.send(readFileSync("update-10.txt"));
+                            break;
+                        }
+                        case "SendChatMessageRpc": {
+                            ws.send(
+                                codec.encodeRpc("ReceiveChatMessageRpc", {
+                                    displayName:
+                                        codec.enterWorldResponse
+                                            .effectiveDisplayName,
+                                    channel: rpc.data.channel,
+                                    message: rpc.data.message,
+                                    uid: codec.enterWorldResponse.uid,
+                                })
+                            );
+                            break;
+                        }
+                        case "EquipItemRpc": {
+                            ws.send(
+                                codec.encodeRpc(
+                                    "InventoryUpdateEquipRpc",
+                                    rpc.data
+                                )
+                            );
+                            break;
+                        }
+                        case "SetLoadoutRpc": {
+                            ws.send(
+                                codec.encodeRpc("SetClientLoadoutRpc", rpc.data)
+                            );
+                            break;
+                        }
+                        case "ParachuteRpc": {
+                            ws.send(
+                                codec.encodeRpc("GameStatusRpc", {
+                                    status: "Parachute",
+                                    countDownEndsTick: 0,
+                                })
+                            );
+                            break;
+                        }
+                        case "SetMarkerRpc": {
+                            ws.send(
+                                codec.encodeRpc("UpdateMarkerRpc", {
+                                    valid: rpc.data.valid,
+                                    uid: codec.encodeEnterWorldResponse.uid,
+                                    x: rpc.data.x * 100,
+                                    y: rpc.data.y * 100,
+                                })
+                            );
+                            break;
+                        }
+                        case "SetSkinRpc": {
+                            
                             break;
                         }
                     }

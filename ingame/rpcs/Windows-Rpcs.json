@@ -281,12 +281,12 @@
                     "Offset": 32,
                     "Type": 0,
                     "XFieldName": "DECOPDPHDNH",
-                    "FieldName": "reason"
+                    "FieldName": "index"
                 }
             ],
             "XClassName": "LCBAEFDFHEP",
             "XParentName": "KHDGFGHPNOH",
-            "ClassName": "PlaceBuildingFailedRpc",
+            "ClassName": "SetClientLoadoutRpc",
             "ParentName": "InRpc"
         },
         {
@@ -678,12 +678,12 @@
                     "Offset": 32,
                     "Type": 8,
                     "XFieldName": "ODFADFIMDDF",
-                    "FieldName": "index"
+                    "FieldName": "reason"
                 }
             ],
             "XClassName": "HOGDGCPFFGO",
             "XParentName": "KHDGFGHPNOH",
-            "ClassName": "SetClientLoadoutRpc",
+            "ClassName": "PlaceBuildingFailedRpc",
             "ParentName": "InRpc"
         },
         {
@@ -789,12 +789,12 @@
                     "Offset": 32,
                     "Type": 0,
                     "XFieldName": "LJELGBCBDBF",
-                    "FieldName": "inventorySlot"
+                    "FieldName": "index"
                 }
             ],
             "XClassName": "ELLAOAHNHOP",
             "XParentName": "KHDGFGHPNOH",
-            "ClassName": "InventoryUpdateEquipRpc",
+            "ClassName": "SetClientLoadoutRpc",
             "ParentName": "InRpc"
         },
         {
@@ -2168,12 +2168,12 @@
                     "Offset": 32,
                     "Type": 0,
                     "XFieldName": "KIDBPNHHAEF",
-                    "FieldName": "json"
+                    "FieldName": "inventorySlot"
                 }
             ],
             "XClassName": "BKINNGPDFBM",
             "XParentName": "KHDGFGHPNOH",
-            "ClassName": "AccountSessionRpc",
+            "ClassName": "InventoryUpdateEquipRpc",
             "ParentName": "InRpc"
         },
         {
