@@ -50,6 +50,11 @@ wss.on("connection", (ws, req) => {
     console.log("Client connected");
 
     let codec = new Codec("../../rpcs/Windows-Rpcs.json");
+    let currentTick = 0;
+    let firing = false;
+    const tickRate = 64;
+    // ~15.625 ms
+    const tickInterval = 1000 / tickRate;
 
     ws.on("message", async (message) => {
         var payload = new Uint8Array(message);
@@ -90,8 +95,8 @@ wss.on("connection", (ws, req) => {
                     allowed: 1,
                     uid: 338,
                     startingTick: 10,
-                    tickRate: 64,
-                    effectiveTickRate: 64,
+                    tickRate: tickRate,
+                    effectiveTickRate: tickRate,
                     players: 0,
                     maxPlayers: 200,
                     chatChannel: 0,
@@ -151,13 +156,18 @@ wss.on("connection", (ws, req) => {
             case PacketId.Ping: {
                 console.log("Incoming PACKET_PING:", payload);
                 const reader = new BinaryReader(payload, 2);
-                const startTick = reader.readUint32();
-                const endTick = startTick + 5;
-                const writer = new BinaryWriter(0);
-                writer.writeUint8(PacketId.Ping);
-                writer.writeUint32(startTick);
-                writer.writeUint32(endTick);
-                ws.send(writer.toArray());
+                if (reader.canRead(3)) {
+                    const requestSentTick = reader.readUint32();
+                    const responseSentTick = currentTick;
+                    const writer = new BinaryWriter(0);
+                    writer.writeUint8(PacketId.Ping);
+                    writer.writeUint32(requestSentTick);
+                    writer.writeUint32(responseSentTick);
+                    ws.send(writer.toArray());
+                    console.log(writer.toArray());
+                } else {
+                    ws.send([7, 0]);
+                }
                 break;
             }
             case PacketId.Rpc: {
@@ -171,7 +181,7 @@ wss.on("connection", (ws, req) => {
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data);
+                    console.log(rpc.name, rpc.data);
 
                     switch (rpc.name) {
                         case "SetPlatformRpc": {
@@ -235,16 +245,12 @@ wss.on("connection", (ws, req) => {
                             break;
                         }
                         case "StartTcpStreamRpc": {
-                            let currentTick = 0;
                             const updateData = readFileSync("update.bin");
                             const lastUpdate = codec.decodeEntityUpdate(
                                 new Uint8Array(updateData)
                             );
                             ws.send(updateData);
                             currentTick = lastUpdate.tick;
-                            
-                            // ~15.625 ms
-                            const tickInterval = 1000 / codec.enterWorldResponse.tickRate;
 
                             (async () => {
                                 while (true) {
@@ -276,6 +282,27 @@ wss.on("connection", (ws, req) => {
                                     uid: codec.enterWorldResponse.uid,
                                 })
                             );
+                            switch (rpc.data.message) {
+                                case "/hack": {
+                                    const player = codec.entityList.get(
+                                        codec.enterWorldResponse.uid
+                                    );
+                                    if (!player) return;
+                                    player.tick.isOnFire = true;
+                                    player.tick.isPoisoned = true;
+                                    player.tick.effect = true;
+                                    player.tick.wood = 999999;
+                                    player.tick.smallAmmo = 9999;
+                                    player.tick.mediumAmmo = 9999;
+                                    player.tick.largeAmmo = 9999;
+                                    player.tick.shotgunAmmo = 9999;
+                                    player.tick.shield = 12157520;
+                                    player.tick.maxShield = 12157520;
+                                    player.tick.Health = 12157520;
+                                    player.tick.MaxHealth = 12157520;
+                                    break;
+                                }
+                            }
                             break;
                         }
                         case "EquipItemRpc": {
@@ -313,17 +340,88 @@ wss.on("connection", (ws, req) => {
                             );
                             break;
                         }
+                        case "LoginRpc": {
+                            ws.send(
+                                codec.encodeRpc("AccountSessionRpc", {
+                                    json: "{}",
+                                })
+                            );
+                        }
                         case "SetSkinRpc": {
-                            if (!codec.entityList.get(codec.enterWorldResponse.uid)) return;
-                            codec.entityList.get(codec.enterWorldResponse.uid).tick
+                            const player = codec.entityList.get(
+                                codec.enterWorldResponse.uid
+                            );
+                            if (!player) return;
+                            player.tick.skinId = rpc.data.skinId;
+                            break;
+                        }
+                        case "SetEmoteRpc": {
+                            const player = codec.entityList.get(
+                                codec.enterWorldResponse.uid
+                            );
+                            if (!player) return;
+                            player.tick.emoteIndex2 = rpc.data.emote2;
+                            player.tick.emoteTick = currentTick;
                             break;
                         }
                         case "InputRpc": {
-                            if (!codec.entityList.get(codec.enterWorldResponse.uid)) return;
-                            if (rpc.data.up) codec.entityList.get(codec.enterWorldResponse.uid).tick.Position.y += 5;
-                            if (rpc.data.down) codec.entityList.get(codec.enterWorldResponse.uid).tick.Position.y -= 5;
-                            if (rpc.data.left) codec.entityList.get(codec.enterWorldResponse.uid).tick.Position.x -= 5;
-                            if (rpc.data.right) codec.entityList.get(codec.enterWorldResponse.uid).tick.Position.x += 5;
+                            const player = codec.entityList.get(
+                                codec.enterWorldResponse.uid
+                            );
+                            if (!player) return;
+
+                            (async () => {
+                                if (firing = true) return;
+                                if (
+                                    rpc.data.mouseUp === -1 &&
+                                    rpc.data.mouseDown !== -1
+                                ) {
+                                    firing = true;
+                                    player.tick.firingTick = currentTick;
+                                    player.tick.firingSequence++;
+                                }
+                                await sleep(tickInterval * 64);
+                                firing = false;
+                            })();
+
+                            // Create direction vector
+                            let dx = 0;
+                            let dy = 0;
+
+                            const speed = 5;
+
+                            // Use angle-based movement if moveDirection is valid
+                            if (
+                                typeof rpc.data.moveDirection === "number" &&
+                                rpc.data.moveDirection >= 0 &&
+                                rpc.data.moveDirection < 360
+                            ) {
+                                // Convert angle to radians (0° = up, clockwise is positive)
+                                const radians =
+                                    rpc.data.moveDirection * (Math.PI / 180);
+                                dx = Math.sin(radians) * speed;
+                                dy = Math.cos(radians) * speed; // No negative, Y increases upward
+                            } else {
+                                // Use WASD-like movement
+                                if (rpc.data.up === 1) dy += 1;
+                                if (rpc.data.down === 1) dy -= 1;
+                                if (rpc.data.left === 1) dx -= 1;
+                                if (rpc.data.right === 1) dx += 1;
+
+                                // Normalize movement
+                                if (dx !== 0 || dy !== 0) {
+                                    const length = Math.sqrt(dx * dx + dy * dy);
+                                    dx = (dx / length) * speed;
+                                    dy = (dy / length) * speed;
+                                }
+                            }
+
+                            // Apply movement
+                            if (dx !== 0 || dy !== 0) {
+                                player.tick.Position.x += dx;
+                                player.tick.Position.y += dy;
+                            }
+
                             break;
                         }
                     }
