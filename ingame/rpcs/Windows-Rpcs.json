@@ -678,12 +678,12 @@
                     "Offset": 32,
                     "Type": 8,
                     "XFieldName": "ODFADFIMDDF",
-                    "FieldName": "reason"
+                    "FieldName": "isObserver"
                 }
             ],
             "XClassName": "HOGDGCPFFGO",
             "XParentName": "KHDGFGHPNOH",
-            "ClassName": "PlaceBuildingFailedRpc",
+            "ClassName": "ObserverRpc",
             "ParentName": "InRpc"
         },
         {

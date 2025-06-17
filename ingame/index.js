@@ -52,7 +52,9 @@ wss.on("connection", (ws, req) => {
     let codec = new Codec("../../rpcs/Windows-Rpcs.json");
     let currentTick = 0;
     let firing = false;
+    let updates = 0;
     const tickRate = 64;
+    let lastUpdateTime;
     // ~15.625 ms
     const tickInterval = 1000 / tickRate;
 
@@ -77,12 +79,8 @@ wss.on("connection", (ws, req) => {
             }
             case PacketId.EnterWorld: {
                 console.log("Incoming PACKET_ENTER_WORLD:", payload);
-                const enterWorldRequest =
-                    codec.decodeEnterWorldRequest(payload);
-                const powResult = codec.validateProofOfWork(
-                    enterWorldRequest.proofOfWork,
-                    endpoint
-                );
+                const enterWorldRequest = codec.decodeEnterWorldRequest(payload);
+                const powResult = codec.validateProofOfWork(enterWorldRequest.proofOfWork, endpoint);
                 if (!powResult.valid) {
                     ws.close();
                     return;
@@ -122,16 +120,13 @@ wss.on("connection", (ws, req) => {
                     rpc.index = i;
                     rpc.nameHash = codec.rpcMapping.Rpcs[i].NameHash;
 
-                    const parameterCount =
-                        codec.rpcMapping.Rpcs[i].Parameters.length;
+                    const parameterCount = codec.rpcMapping.Rpcs[i].Parameters.length;
                     rpc.isArray = codec.rpcMapping.Rpcs[i].IsArray;
                     rpc.parameters = [];
                     for (let j = 0; j < parameterCount; ++j) {
                         let rpcParameter = {};
-                        rpcParameter.nameHash =
-                            codec.rpcMapping.Rpcs[i].Parameters[j].NameHash;
-                        rpcParameter.type =
-                            codec.rpcMapping.Rpcs[i].Parameters[j].Type;
+                        rpcParameter.nameHash = codec.rpcMapping.Rpcs[i].Parameters[j].NameHash;
+                        rpcParameter.type = codec.rpcMapping.Rpcs[i].Parameters[j].Type;
                         rpcParameter.internalIndex = -1;
                         rpc.parameters.push(rpcParameter);
                     }
@@ -174,14 +169,12 @@ wss.on("connection", (ws, req) => {
                 // console.log("Incoming PACKET_RPC:", payload);
                 const decrypedData = codec.cryptRpc(payload);
 
-                const definition = codec.enterWorldResponse.rpcs.find(
-                    (rpc) => rpc.index === decrypedData[1]
-                );
+                const definition = codec.enterWorldResponse.rpcs.find((rpc) => rpc.index === decrypedData[1]);
 
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    console.log(rpc.name, rpc.data);
+                    // console.log(rpc.name, rpc.data);
 
                     switch (rpc.name) {
                         case "SetPlatformRpc": {
@@ -189,10 +182,7 @@ wss.on("connection", (ws, req) => {
                             for (const file of await fs.readdir(schemasDir)) {
                                 if (path.extname(file) === ".json") {
                                     const name = path.parse(file).name;
-                                    const data = await fs.readFile(
-                                        path.join(schemasDir, file),
-                                        "utf-8"
-                                    );
+                                    const data = await fs.readFile(path.join(schemasDir, file), "utf-8");
                                     ws.send(
                                         codec.encodeRpc("CompressedDataRpc", {
                                             dataName: name,
@@ -235,38 +225,54 @@ wss.on("connection", (ws, req) => {
                             ws.send(
                                 codec.encodeRpc("PlayerCountRpc", {
                                     team1Alive: 0,
-                                    partiesAlive: 999,
+                                    partiesAlive: 1,
                                     team2Alive: 0,
-                                    playersAlive: 999,
-                                    totalParties: 999,
-                                    totalPlayers: 999,
+                                    playersAlive: 1,
+                                    totalParties: 1,
+                                    totalPlayers: 1,
+                                })
+                            );
+                            ws.send(
+                                codec.encodeRpc("ObserverRpc", {
+                                    isObserver: 1,
                                 })
                             );
                             break;
                         }
                         case "StartTcpStreamRpc": {
-                            const updateData = readFileSync("update.bin");
-                            const lastUpdate = codec.decodeEntityUpdate(
-                                new Uint8Array(updateData)
-                            );
+                            const updateData = new Uint8Array(readFileSync("update.bin"));
+                            const firstUpdate = codec.decodeEntityUpdate(updateData);
                             ws.send(updateData);
-                            currentTick = lastUpdate.tick;
+                            currentTick = firstUpdate.tick;
 
                             (async () => {
+                                let nextTick = Date.now() + tickInterval;
+
                                 while (true) {
                                     // Send tick update
-                                    ws.send(
-                                        codec.encodeEntityUpdate({
-                                            createdEntities: [],
-                                            tick: ++currentTick,
-                                            deletedEntities: [],
-                                        })
-                                    );
+                                    const reencodedUpdate = codec.encodeEntityUpdate({
+                                        createdEntities: [],
+                                        tick: ++currentTick,
+                                        deletedEntities: [],
+                                    });
+                                    ws.send(reencodedUpdate);
+                                    writeFileSync("update-reencoded.bin", reencodedUpdate);
 
-                                    // console.log(currentTick);
+                                    const player = codec.entityList.get(codec.enterWorldResponse.uid);
+                                    // console.log(player?.currentTick);
+                                    if (player && firing && currentTick - player.currentTick.firingTick > 32) {
+                                        // console.log(currentTick - player.currentTick.firingTick);
+                                        player.currentTick.firingTick = currentTick;
+                                        player.currentTick.firingSequence++;
+                                    }
+                                    updates++;
 
                                     // Wait for next tick
-                                    await sleep(tickInterval);
+                                    const now = Date.now();
+                                    const sleepTime = Math.max(0, nextTick - now);
+                                    await sleep(sleepTime);
+
+                                    nextTick += tickInterval;
                                 }
                             })();
                             break;
@@ -274,50 +280,65 @@ wss.on("connection", (ws, req) => {
                         case "SendChatMessageRpc": {
                             ws.send(
                                 codec.encodeRpc("ReceiveChatMessageRpc", {
-                                    displayName:
-                                        codec.enterWorldResponse
-                                            .effectiveDisplayName,
+                                    displayName: codec.enterWorldResponse.effectiveDisplayName,
                                     channel: rpc.data.channel,
                                     message: rpc.data.message,
                                     uid: codec.enterWorldResponse.uid,
                                 })
                             );
-                            switch (rpc.data.message) {
-                                case "/hack": {
-                                    const player = codec.entityList.get(
-                                        codec.enterWorldResponse.uid
+                            const player = codec.entityList.get(codec.enterWorldResponse.uid);
+                            if (!player) break;
+                            const prefix = "/";
+                            const index = rpc.data.message.indexOf(" ");
+                            const command = index === -1 ? rpc.data.message : rpc.data.message.substring(0, index);
+                            const args = index === -1 ? null : rpc.data.message.substring(index + 1);
+                            if (!command || !command.startsWith(prefix)) return;
+                            const trigger = command.slice(prefix.length).toLowerCase();
+                            switch (trigger) {
+                                case "hack": {
+                                    player.currentTick.isOnFire = true;
+                                    player.currentTick.isPoisoned = true;
+                                    player.currentTick.effect = true;
+                                    player.currentTick.wood = 999999;
+                                    player.currentTick.smallAmmo = 9999;
+                                    player.currentTick.mediumAmmo = 9999;
+                                    player.currentTick.largeAmmo = 9999;
+                                    player.currentTick.shotgunAmmo = 9999;
+                                    player.currentTick.shield = 12157520;
+                                    player.currentTick.maxShield = 12157520;
+                                    player.currentTick.Health = 12157520;
+                                    player.currentTick.MaxHealth = 12157520;
+                                    player.currentTick.healthDamageTaken = 1337;
+                                    ws.send(
+                                        codec.encodeRpc("PlayerCountRpc", {
+                                            team1Alive: 0,
+                                            partiesAlive: 999,
+                                            team2Alive: 0,
+                                            playersAlive: 999,
+                                            totalParties: 999,
+                                            totalPlayers: 999,
+                                        })
                                     );
-                                    if (!player) return;
-                                    player.tick.isOnFire = true;
-                                    player.tick.isPoisoned = true;
-                                    player.tick.effect = true;
-                                    player.tick.wood = 999999;
-                                    player.tick.smallAmmo = 9999;
-                                    player.tick.mediumAmmo = 9999;
-                                    player.tick.largeAmmo = 9999;
-                                    player.tick.shotgunAmmo = 9999;
-                                    player.tick.shield = 12157520;
-                                    player.tick.maxShield = 12157520;
-                                    player.tick.Health = 12157520;
-                                    player.tick.MaxHealth = 12157520;
+                                    break;
+                                }
+                                case "tp": {
+                                    if (!args) break;
+                                    let parts = args.split(" ");
+                                    if (parts.length < 2 || parts.some((p) => isNaN(p) || p.trim() === "")) break;
+                                    let coords = parts.map(Number).slice(0, 2);
+                                    player.currentTick.Position.x = coords[0];
+                                    player.currentTick.Position.y = coords[1];
                                     break;
                                 }
                             }
                             break;
                         }
                         case "EquipItemRpc": {
-                            ws.send(
-                                codec.encodeRpc(
-                                    "InventoryUpdateEquipRpc",
-                                    rpc.data
-                                )
-                            );
+                            ws.send(codec.encodeRpc("InventoryUpdateEquipRpc", rpc.data));
                             break;
                         }
                         case "SetLoadoutRpc": {
-                            ws.send(
-                                codec.encodeRpc("SetClientLoadoutRpc", rpc.data)
-                            );
+                            ws.send(codec.encodeRpc("SetClientLoadoutRpc", rpc.data));
                             break;
                         }
                         case "ParachuteRpc": {
@@ -348,47 +369,38 @@ wss.on("connection", (ws, req) => {
                             );
                         }
                         case "SetSkinRpc": {
-                            const player = codec.entityList.get(
-                                codec.enterWorldResponse.uid
-                            );
-                            if (!player) return;
-                            player.tick.skinId = rpc.data.skinId;
+                            const player = codec.entityList.get(codec.enterWorldResponse.uid);
+                            if (!player) break;
+                            player.currentTick.skinId = rpc.data.skinId;
                             break;
                         }
                         case "SetEmoteRpc": {
-                            const player = codec.entityList.get(
-                                codec.enterWorldResponse.uid
-                            );
-                            if (!player) return;
-                            player.tick.emoteIndex2 = rpc.data.emote2;
-                            player.tick.emoteTick = currentTick;
+                            const player = codec.entityList.get(codec.enterWorldResponse.uid);
+                            if (!player) break;
+                            player.currentTick.emoteIndex2 = rpc.data.emote2;
+                            player.currentTick.emoteTick = currentTick;
                             break;
                         }
                         case "InputRpc": {
-                            const player = codec.entityList.get(
-                                codec.enterWorldResponse.uid
-                            );
-                            if (!player) return;
+                            const player = codec.entityList.get(codec.enterWorldResponse.uid);
+                            if (!player) break;
 
-                            (async () => {
-                                if (firing = true) return;
-                                if (
-                                    rpc.data.mouseUp === -1 &&
-                                    rpc.data.mouseDown !== -1
-                                ) {
-                                    firing = true;
-                                    player.tick.firingTick = currentTick;
-                                    player.tick.firingSequence++;
-                                }
-                                await sleep(tickInterval * 64);
+                            if (
+                                rpc.data.mouseUp === -1 &&
+                                // rpc.data.mouseDown !== -1 &&
+                                !firing
+                            ) {
+                                firing = true;
+                            } else {
                                 firing = false;
-                            })();
+                            }
 
                             // Create direction vector
                             let dx = 0;
                             let dy = 0;
 
-                            const speed = 5;
+                            const speed = 4.85;
+                            // const speed = 20;
 
                             // Use angle-based movement if moveDirection is valid
                             if (
@@ -397,8 +409,7 @@ wss.on("connection", (ws, req) => {
                                 rpc.data.moveDirection < 360
                             ) {
                                 // Convert angle to radians (0° = up, clockwise is positive)
-                                const radians =
-                                    rpc.data.moveDirection * (Math.PI / 180);
+                                const radians = rpc.data.moveDirection * (Math.PI / 180);
                                 dx = Math.sin(radians) * speed;
                                 dy = Math.cos(radians) * speed; // No negative, Y increases upward
                             } else {
@@ -418,8 +429,8 @@ wss.on("connection", (ws, req) => {
 
                             // Apply movement
                             if (dx !== 0 || dy !== 0) {
-                                player.tick.Position.x += dx;
-                                player.tick.Position.y += dy;
+                                player.currentTick.Position.x += dx;
+                                player.currentTick.Position.y += dy;
                             }
 
                             break;
@@ -445,10 +456,7 @@ wss.on("connection", (ws, req) => {
                 break;
             }
             case PacketId.UdpPingWithCompressedUids: {
-                console.log(
-                    "Incoming PACKET_UDP_TICK_WITH_COMPRESSED_UIDS:",
-                    payload
-                );
+                console.log("Incoming PACKET_UDP_TICK_WITH_COMPRESSED_UIDS:", payload);
                 break;
             }
             case PacketId.UdpFragment: {
@@ -476,14 +484,6 @@ wss.on("connection", (ws, req) => {
 });
 
 // Start the server
-server.listen(
-    parseInt(process.env.PORT || "3003"),
-    process.env.HOST || "localhost",
-    () => {
-        console.log(
-            `[${
-                process.env.SERVER_NAME || "ZRPS"
-            }] Ingame is now listening on port ${process.env.PORT || "3003"}`
-        );
-    }
-);
+server.listen(parseInt(process.env.PORT || "3003"), process.env.HOST || "localhost", () => {
+    console.log(`[${process.env.SERVER_NAME || "ZRPS"}] Ingame is now listening on port ${process.env.PORT || "3003"}`);
+});
