@@ -19,6 +19,219 @@ function sleep(ms) {
 // Load environment config
 dotenv.config();
 
+const tickFieldMap = new Map([
+    [3965757274, "Name"],
+    [2045070744, "Position"],
+    [2112680891, "Scale"],
+    [1899079302, "EntityClass"],
+    [3370100680, "ModelHash"],
+    [338163296, "Yaw"],
+    [2038511229, "InterpolatedYaw"],
+    [396231043, "AimingYaw"],
+    [2232061803, "Health"],
+    [3411739057, "MaxHealth"],
+    [1658281879, "Energy"],
+    [2837959133, "MaxEnergy"],
+    [664883256, "ReconnectSecret"],
+    [2228735555, "Score"],
+    [1998601136, "Armor"],
+    [537809156, "SpeedAttribute"],
+    [1166125470, "Damage"],
+    [463881754, "AvailableSkillPoints"],
+    [1419758453, "CollisionRadius"],
+    [2789835959, "Width"],
+    [4139697398, "Height"],
+    [164904981, "Level"],
+    [2065533638, "Kills"],
+    [487111411, "Dead"],
+    [1776350289, "TimeAlive"],
+    [1168516394, "EntityMap"],
+    [1134913306, "NextPooledTick"],
+    [3940594818, "deathTick"],
+    [2460616447, "firingTick"],
+    [1325424963, "firingSequence"],
+    [2883383757, "lastDamagedTick"],
+    [129999719, "equippedCategoryId"],
+    [1506661530, "equippedDataIndex"],
+    [3284448976, "equippedTier"],
+    [2076321484, "equippedInventorySlot"],
+    [1364116198, "equippedSkinId"],
+    [3044274584, "shield"],
+    [4223951838, "maxShield"],
+    [9937773, "healthDamageTaken"],
+    [3707014400, "shieldDamageTaken"],
+    [1804627392, "effect"],
+    [2650249996, "knockDowns"],
+    [1205522264, "currentAmmo"],
+    [1767079171, "maxAmmo"],
+    [1312790758, "smallAmmo"],
+    [4117515090, "mediumAmmo"],
+    [3527174458, "largeAmmo"],
+    [752369509, "shotgunAmmo"],
+    [2516899740, "wood"],
+    [4272078913, "startChargingTick"],
+    [3740327455, "startChargeUpTick"],
+    [1657309942, "reloadStartedTick"],
+    [4095913789, "reloadEndsTick"],
+    [2391951737, "actionStartedTick"],
+    [3013078650, "actionEndsTick"],
+    [1854863057, "cockingMsRemaining"],
+    [4081874656, "canParachute"],
+    [1987892684, "parachuteStartedTick"],
+    [2426740830, "parachuteMsRemaining"],
+    [34162050, "isFreefalling"],
+    [1918353449, "emoteIndex"],
+    [3821095497, "emoteIndex2"],
+    [3239833222, "emoteTick"],
+    [570200045, "parachuteId"],
+    [957099820, "bodyId"],
+    [2724486410, "backpackId"],
+    [4127365483, "fistSkinId"],
+    [2948797259, "spectatingUid"],
+    [1918570631, "spectateCount"],
+    [2666157490, "partyId"],
+    [1803613228, "partyColor"],
+    [2950326362, "reviveStartedTick"],
+    [1859733209, "reviveEndsTick"],
+    [1553612668, "isKnockedDown"],
+    [918024898, "knockedDownHealth"],
+    [3724070810, "knockedDownMaxHealth"],
+    [910088174, "isOnFire"],
+    [3980301664, "isPoisoned"],
+    [2173100889, "isSlowed"],
+    [1069949249, "isHealing"],
+    [1004238105, "isInWater"],
+    [728513717, "isInBuildingMode"],
+    [4223896640, "zombieKills"],
+    [1349887677, "movementSpeedAffinityRocks"],
+    [139502709, "defenseAffinityRocks"],
+    [733149254, "bulletDamageAffinityRocks"],
+    [1445646640, "bulletSpeedAffinityRocks"],
+    [2256189882, "portalEnterTick"],
+    [1779994739, "isGrappling"],
+    [3115359844, "isVip"],
+    [444524105, "isBoosted"],
+    [4209796065, "lastBulletDataIndex"],
+    [3076225077, "lastBulletLifetimePercent"],
+    [2653271241, "grapplingHookPosition"],
+    [1775539923, "vehicleUid"],
+    [1184607771, "vehicleSlot"],
+    [2034799789, "equippedModifierIndex"],
+    [3257708849, "obtainableUids"],
+    [2096278210, "interactableUids"],
+    [485783130, "visibleBuildingUids"],
+    [471584441, "dataIndex"],
+    [441901997, "collisionUid"],
+    [2729366668, "ownerUid"],
+    [3886314514, "trailId"],
+    [3423242791, "trailColorId"],
+    [2549878347, "creationTick"],
+    [2089316765, "stuckAtTick"],
+    [2636873287, "effectiveLifetimeMs"],
+    [3540988168, "categoryId"],
+    [124913137, "tier"],
+    [3866926138, "quantity"],
+    [2240057735, "skinId"],
+    [3707506636, "modifierIndex"],
+    [2900975594, "weaponKills"],
+    [145240268, "currentCircleRadius"],
+    [1245424964, "nextCircleRadius"],
+    [2941477767, "lastCircleRadius"],
+    [3318715651, "currentCirclePosition"],
+    [3095156091, "nextCirclePosition"],
+    [3256293950, "lastCirclePosition"],
+    [291542999, "currentCircleTick"],
+    [1489880305, "openDoorIds"],
+    [956693851, "openDoorDirections"],
+    [2730579844, "brokenWindowIds"],
+    [1574999092, "sprayIndex"],
+    [2201028498, "airDropLandTick"],
+    [791445081, "vehicleOccupants"],
+]);
+
+function deepEqual(a, b) {
+    if (a === b) return true;
+    if (typeof a !== typeof b) return false;
+
+    if (typeof a === "object" && a != null && b != null) {
+        const aKeys = Object.keys(a);
+        const bKeys = Object.keys(b);
+        if (aKeys.length !== bKeys.length) return false;
+
+        return aKeys.every((key) => deepEqual(a[key], b[key]));
+    }
+
+    return false;
+}
+
+let currentTickNumber = 0;
+
+function calculateEntityUpdate(oldEntityList, newEntityList, tickFieldMap) {
+    const deletedEntities = [];
+    const createdEntities = [];
+    const updatedEntities = new Map();
+
+    const tickFieldNameToId = new Map();
+    for (const [id, name] of tickFieldMap.entries()) {
+        tickFieldNameToId.set(name, id);
+    }
+
+    const oldUids = new Set(oldEntityList.keys());
+    const newUids = new Set(newEntityList.keys());
+
+    // Deleted entities
+    for (const uid of oldUids) {
+        if (!newUids.has(uid)) {
+            deletedEntities.push(uid);
+        }
+    }
+
+    // Created entities
+    for (const uid of newUids) {
+        if (!oldUids.has(uid)) {
+            createdEntities.push(uid);
+        }
+    }
+
+    // Updated entities
+    for (const uid of newUids) {
+        if (oldUids.has(uid)) {
+            const oldEntity = oldEntityList.get(uid);
+            const newEntity = newEntityList.get(uid);
+
+            const oldTick = oldEntity?.tick;
+            const newTick = newEntity?.tick;
+
+            if (!oldTick || !newTick) continue;
+
+            const changedFieldIds = [];
+
+            for (const key of Object.keys(newTick)) {
+                const fieldId = tickFieldNameToId.get(key);
+                if (fieldId === undefined) continue;
+
+                const oldVal = oldTick[key];
+                const newVal = newTick[key];
+
+                if (!deepEqual(oldVal, newVal)) {
+                    changedFieldIds.push(fieldId);
+                }
+            }
+
+            if (changedFieldIds.length > 0) {
+                updatedEntities.set(uid, changedFieldIds);
+            }
+        }
+    }
+
+    return {
+        tick: currentTickNumber,
+        deletedEntities,
+        createdEntities,
+        updatedEntities,
+    };
+}
+
 // Create MySQL pool
 const mysqlOptions = {
     host: process.env.DATABASE_HOST || "127.0.0.1",
@@ -50,13 +263,11 @@ wss.on("connection", (ws, req) => {
     console.log("Client connected");
 
     let codec = new Codec("../../rpcs/Windows-Rpcs.json");
-    let currentTick = 0;
     let firing = false;
-    let updates = 0;
+    let dx = 0;
+    let dy = 0;
     const tickRate = 64;
-    let lastUpdateTime;
-    // ~15.625 ms
-    const tickInterval = 1000 / tickRate;
+    const tickInterval = 1000 / tickRate; // 15.625 ms
 
     ws.on("message", async (message) => {
         var payload = new Uint8Array(message);
@@ -153,7 +364,7 @@ wss.on("connection", (ws, req) => {
                 const reader = new BinaryReader(payload, 2);
                 if (reader.canRead(3)) {
                     const requestSentTick = reader.readUint32();
-                    const responseSentTick = currentTick;
+                    const responseSentTick = currentTickNumber;
                     const writer = new BinaryWriter(0);
                     writer.writeUint8(PacketId.Ping);
                     writer.writeUint32(requestSentTick);
@@ -243,36 +454,43 @@ wss.on("connection", (ws, req) => {
                             const updateData = new Uint8Array(readFileSync("update.bin"));
                             const firstUpdate = codec.decodeEntityUpdate(updateData);
                             ws.send(updateData);
-                            currentTick = firstUpdate.tick;
+                            currentTickNumber = firstUpdate.tick;
+                            let previousEntityList = codec.entityList;
 
                             (async () => {
                                 let nextTick = Date.now() + tickInterval;
 
                                 while (true) {
                                     // Send tick update
-                                    const reencodedUpdate = codec.encodeEntityUpdate({
-                                        createdEntities: [],
-                                        tick: ++currentTick,
-                                        deletedEntities: [],
-                                    });
-                                    ws.send(reencodedUpdate);
-                                    writeFileSync("update-reencoded.bin", reencodedUpdate);
+                                    currentTickNumber++;
 
                                     const player = codec.entityList.get(codec.enterWorldResponse.uid);
-                                    // console.log(player?.currentTick);
-                                    if (player && firing && currentTick - player.currentTick.firingTick > 32) {
-                                        // console.log(currentTick - player.currentTick.firingTick);
-                                        player.currentTick.firingTick = currentTick;
-                                        player.currentTick.firingSequence++;
+                                    if (player && firing && currentTickNumber - player.tick.firingTick > 32) {
+                                        // console.log(currentTickNumber - player.tick.firingTick);
+                                        player.tick.firingTick = currentTickNumber;
+                                        player.tick.firingSequence++;
                                     }
-                                    updates++;
+                                    if (dx !== 0 || dy !== 0) {
+                                        player.tick.Position.x += dx;
+                                        player.tick.Position.y += dy;
+                                    }
+
+                                    const newUpdate = calculateEntityUpdate(
+                                        previousEntityList,
+                                        codec.entityList,
+                                        tickFieldMap
+                                    );
+                                    console.log(newUpdate);
+                                    const reencodedUpdate = codec.encodeEntityUpdate(newUpdate);
+                                    ws.send(reencodedUpdate);
 
                                     // Wait for next tick
                                     const now = Date.now();
                                     const sleepTime = Math.max(0, nextTick - now);
                                     await sleep(sleepTime);
-
                                     nextTick += tickInterval;
+
+                                    previousEntityList = structuredClone(codec.entityList);
                                 }
                             })();
                             break;
@@ -296,19 +514,19 @@ wss.on("connection", (ws, req) => {
                             const trigger = command.slice(prefix.length).toLowerCase();
                             switch (trigger) {
                                 case "hack": {
-                                    player.currentTick.isOnFire = true;
-                                    player.currentTick.isPoisoned = true;
-                                    player.currentTick.effect = true;
-                                    player.currentTick.wood = 999999;
-                                    player.currentTick.smallAmmo = 9999;
-                                    player.currentTick.mediumAmmo = 9999;
-                                    player.currentTick.largeAmmo = 9999;
-                                    player.currentTick.shotgunAmmo = 9999;
-                                    player.currentTick.shield = 12157520;
-                                    player.currentTick.maxShield = 12157520;
-                                    player.currentTick.Health = 12157520;
-                                    player.currentTick.MaxHealth = 12157520;
-                                    player.currentTick.healthDamageTaken = 1337;
+                                    player.tick.isOnFire = true;
+                                    player.tick.isPoisoned = true;
+                                    player.tick.effect = true;
+                                    player.tick.wood = 999999;
+                                    player.tick.smallAmmo = 9999;
+                                    player.tick.mediumAmmo = 9999;
+                                    player.tick.largeAmmo = 9999;
+                                    player.tick.shotgunAmmo = 9999;
+                                    player.tick.shield = 12157520;
+                                    player.tick.maxShield = 12157520;
+                                    player.tick.Health = 12157520;
+                                    player.tick.MaxHealth = 12157520;
+                                    player.tick.healthDamageTaken = 1337;
                                     ws.send(
                                         codec.encodeRpc("PlayerCountRpc", {
                                             team1Alive: 0,
@@ -326,8 +544,8 @@ wss.on("connection", (ws, req) => {
                                     let parts = args.split(" ");
                                     if (parts.length < 2 || parts.some((p) => isNaN(p) || p.trim() === "")) break;
                                     let coords = parts.map(Number).slice(0, 2);
-                                    player.currentTick.Position.x = coords[0];
-                                    player.currentTick.Position.y = coords[1];
+                                    player.tick.Position.x = coords[0];
+                                    player.tick.Position.y = coords[1];
                                     break;
                                 }
                             }
@@ -371,33 +589,33 @@ wss.on("connection", (ws, req) => {
                         case "SetSkinRpc": {
                             const player = codec.entityList.get(codec.enterWorldResponse.uid);
                             if (!player) break;
-                            player.currentTick.skinId = rpc.data.skinId;
+                            player.tick.skinId = rpc.data.skinId;
                             break;
                         }
                         case "SetEmoteRpc": {
                             const player = codec.entityList.get(codec.enterWorldResponse.uid);
                             if (!player) break;
-                            player.currentTick.emoteIndex2 = rpc.data.emote2;
-                            player.currentTick.emoteTick = currentTick;
+                            player.tick.emoteIndex2 = rpc.data.emote2;
+                            player.tick.emoteTick = currentTickNumber;
                             break;
                         }
                         case "InputRpc": {
                             const player = codec.entityList.get(codec.enterWorldResponse.uid);
                             if (!player) break;
 
-                            if (
-                                rpc.data.mouseUp === -1 &&
-                                // rpc.data.mouseDown !== -1 &&
-                                !firing
-                            ) {
+                            if (rpc.data.mouseUp === -1 && !firing) {
                                 firing = true;
                             } else {
                                 firing = false;
                             }
 
                             // Create direction vector
+                            /*
                             let dx = 0;
                             let dy = 0;
+                            */
+                            dx = 0;
+                            dy = 0;
 
                             const speed = 4.85;
                             // const speed = 20;
@@ -428,10 +646,12 @@ wss.on("connection", (ws, req) => {
                             }
 
                             // Apply movement
+                            /*
                             if (dx !== 0 || dy !== 0) {
-                                player.currentTick.Position.x += dx;
-                                player.currentTick.Position.y += dy;
+                                player.tick.Position.x += dx;
+                                player.tick.Position.y += dy;
                             }
+                            */
 
                             break;
                         }
