@@ -121,7 +121,7 @@ wss.on("connection", (ws, req) => {
     const endpoint = req.url.slice(1);
     console.log("Client connected");
 
-    let codec = new Codec("../../rpcs/Windows-Rpcs.json");
+    let codec = new Codec(JSON.parse(readFileSync(`./rpcs/Windows-Rpcs.json`), { encoding: "utf-8" }));
     let firing = false;
     let dx = 0;
     let dy = 0;
@@ -157,7 +157,8 @@ wss.on("connection", (ws, req) => {
                 }
                 const platform = powResult.platform;
                 console.log(platform);
-                codec = new Codec(`../../rpcs/${platform}-Rpcs.json`);
+                const rpcMapping = JSON.parse(readFileSync(`./rpcs/${platform}-Rpcs.json`), { encoding: "utf-8" });
+                codec = new Codec(rpcMapping);
                 const enterWorldResponse = {
                     version: codec.rpcMapping.Codec,
                     allowed: 1,
@@ -314,15 +315,17 @@ wss.on("connection", (ws, req) => {
                         case "StartTcpStreamRpc": {
                             const updateData = new Uint8Array(readFileSync("update.bin"));
                             const firstUpdate = codec.decodeEntityUpdate(updateData);
-                            // console.log(firstUpdate);
-                            // const firstUpdate = {
-                            //     tick: codec.enterWorldResponse.startingTick,
-                            //     createdEntities: [338],
-                            //     deletedEntities: [],
-                            //     updatedEntities: new Map()
-                            // };
-                            // const updateData = codec.encodeEntityUpdate(firstUpdate);
-                            // console.log(codec.entityList);
+                            /*
+                            console.log(firstUpdate);
+                            const firstUpdate = {
+                                tick: codec.enterWorldResponse.startingTick,
+                                createdEntities: [338],
+                                deletedEntities: [],
+                                updatedEntities: new Map()
+                            };
+                            const updateData = codec.encodeEntityUpdate(firstUpdate);
+                            console.log(codec.entityList);
+                            */
                             ws.send(updateData);
                             currentTickNumber = firstUpdate.tick;
                             let previousEntityList = codec.entityList;
