@@ -84,7 +84,7 @@
             ],
             "XClassName": "PAHNNJKGBHC",
             "XParentName": "HHDNNJGGAON",
-            "ClassName": "AccountSessionRpc",
+            "ClassName": "LoginResponseRpc",
             "ParentName": "InRpc"
         },
         {
@@ -1187,7 +1187,7 @@
             ],
             "XClassName": "JDKIKDJHBLH",
             "XParentName": "HHDNNJGGAON",
-            "ClassName": "LoginResponseRpc",
+            "ClassName": "AccountSessionRpc",
             "ParentName": "InRpc"
         },
         {
