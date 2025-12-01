@@ -8,6 +8,7 @@ module.exports = {
             anonymous: 'always',
             named: 'never',
             asyncArrow: 'always'
-        }]
+        }],
+        allowEscape: true
     }
 };
