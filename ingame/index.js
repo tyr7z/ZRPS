@@ -4,7 +4,7 @@ import https from "node:https";
 import { WebSocketServer } from "ws";
 import mysql from "mysql2/promise";
 import * as dotenv from "dotenv";
-import { Codec, PacketId, BinaryReader, BinaryWriter } from "zombslib";
+import { Codec, PacketId, BufferReader, BufferWriter } from "zombslib";
 
 import fs from "fs/promises";
 import path from "path";
@@ -150,7 +150,7 @@ wss.on("connection", (ws, req) => {
             case PacketId.EnterWorld: {
                 console.log("Incoming PACKET_ENTER_WORLD:", payload);
                 const enterWorldRequest = codec.decodeEnterWorldRequest(payload);
-                const powResult = codec.validateProofOfWork(enterWorldRequest.proofOfWork, endpoint);
+                const powResult = codec.crypto.validateProofOfWork(enterWorldRequest.proofOfWork, endpoint);
                 if (!powResult.valid) {
                     ws.close();
                     return;
@@ -206,7 +206,7 @@ wss.on("connection", (ws, req) => {
                 }
                 codec.enterWorldResponse = enterWorldResponse;
                 ws.send(codec.encodeEnterWorldResponse(enterWorldResponse));
-                codec.computeRpcKey(
+                codec.crypto.computeRpcKey(
                     enterWorldRequest.version,
                     new TextEncoder().encode("/" + endpoint),
                     enterWorldRequest.proofOfWork
@@ -221,14 +221,14 @@ wss.on("connection", (ws, req) => {
             }
             case PacketId.Ping: {
                 console.log("Incoming PACKET_PING:", payload);
-                const reader = new BinaryReader(payload, 2);
+                const reader = new BufferReader(payload, 2);
                 if (reader.canRead(3)) {
-                    const requestSentTick = reader.readUint32();
+                    const requestSentTick = reader.u32();
                     const responseSentTick = currentTickNumber;
-                    const writer = new BinaryWriter(0);
-                    writer.writeUint8(PacketId.Ping);
-                    writer.writeUint32(requestSentTick);
-                    writer.writeUint32(responseSentTick);
+                    const writer = new BufferWriter(0);
+                    writer.u8(PacketId.Ping);
+                    writer.u32(requestSentTick);
+                    writer.u32(responseSentTick);
                     ws.send(writer.toArray());
                     console.log(writer.toArray());
                 } else {
@@ -238,7 +238,7 @@ wss.on("connection", (ws, req) => {
             }
             case PacketId.Rpc: {
                 // console.log("Incoming PACKET_RPC:", payload);
-                const decrypedData = codec.cryptRpc(payload);
+                const decrypedData = codec.crypto.cryptRpc(payload);
 
                 const definition = codec.enterWorldResponse.rpcs.find((rpc) => rpc.index === decrypedData[1]);
 

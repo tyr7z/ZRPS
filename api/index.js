@@ -16,7 +16,9 @@ import fs from "fs";
 dotenv.config();
 
 // Create web server
-const app = fastify();
+const app = fastify({
+    // logger: true,
+});
 
 // Create MySQL pool connection
 const mysqlOptions = {
@@ -50,12 +52,8 @@ app.register(view, {
 // Register routes
 const __dirname = dirname(url.fileURLToPath(import.meta.url));
 const routesPath = path.join(__dirname, "routes");
-const routeFiles = fs
-    .readdirSync(routesPath)
-    .filter((file) => file.endsWith(".js"));
-for (const file of routeFiles) {
-    const filePath = path.join(url.pathToFileURL(routesPath).toString(), file);
-    const route = await import(filePath);
+for (const file of fs.readdirSync(routesPath).filter(f => f.endsWith(".js"))) {
+    const route = await import(new URL(file, url.pathToFileURL(routesPath + path.sep)));
     if ("prefix" in route) {
         app.register(route, { prefix: route.prefix });
     }

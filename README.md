@@ -12,7 +12,7 @@ Check out the [wiki](https://github.com/ZRprivateServer/ZRprivateServer/wiki) to
 
 ## Support
 
-If you need any help, you can reach out to the community on the [Discord server](https://discord.gg/btGEvyyd) or open an issue in the GitHub repository.
+If you need any help, you can reach out to the community on the [Discord server](https://discord.gg/wgbSdvve7B) or open an issue in the GitHub repository.
 
 ## Contributing
 
