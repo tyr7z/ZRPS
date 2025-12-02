@@ -1,9 +1,15 @@
 // Import the necessary modules
-import http from "http";
-import Socketio from "socket.io";
-import mysql from "mysql2/promise";
+import { createServer as createHttpsServer } from "https";
+import { createServer as createHttpServer } from "http";
+import { parse } from "url";
+import { randomBytes } from "crypto";
+import { inspect } from "util";
+import { appendFileSync, readFileSync, writeFileSync } from "fs";
+import { WebSocketServer } from "ws";
 import * as dotenv from "dotenv";
+import mysql from "mysql2/promise";
 import { generatePartyKey, hashPlayerIp } from "./utils.js";
+import EventEmitter from "events";
 
 // Load environment config
 dotenv.config();
@@ -44,26 +50,116 @@ if (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED?.toLowerCase() === "true") {
 }
 const pool = mysql.createPool(mysqlOptions);
 
-// Create an HTTP server
-const server = http.createServer();
+// Shared proxied Mason server
+const wss = new WebSocketServer({ noServer: true });
 
-// Create a Socket.io server instance
-const io = new Socketio(server, { path: "/gateway" });
+// WebSocket upgrade handler (shared for both HTTP and HTTPS)
+function handleUpgrade(server) {
+    server.on("upgrade", (req, socket, head) => {
+        const { pathname, query } = parse(req.url, true);
+        console.log(`Upgrade on ${pathname}`, query);
+        console.log(req.url);
+
+        if (pathname === "/gateway/" && query.EIO === "4" && query.transport === "websocket") {
+            wss.handleUpgrade(req, socket, head, (ws) => {
+                wss.emit("connection", ws, req);
+            });
+        } else {
+            socket.destroy();
+        }
+    });
+}
+
+function parseSocketIOMessage(message) {
+    try {
+        // Remove the leading "42" and parse the rest of the message as JSON
+        const jsonData = JSON.parse(message.slice(2));
+
+        // Extract the event name and data from the parsed JSON
+        const eventName = jsonData[0];
+        const eventData = jsonData[1];
+
+        return { eventName, eventData };
+    } catch {
+        return null;
+    }
+}
 
 // Define players and parties object
 const players = {};
 const parties = {};
 
+/*
+// HTTPS Mason server
+const httpsMasonServer = createHttpsServer({
+    key: readFileSync("privatekey.pem"),
+    cert: readFileSync("certificate.pem"),
+});
+handleUpgrade(httpsMasonServer);
+httpsMasonServer.listen(parseInt(process.env.PORT || "3002"), process.env.HOST || "127.0.0.1", () => {
+    console.log(
+        `[${process.env.SERVER_NAME || "ZRPS"}] Mason is now listening on https://${
+            process.env.HOST || "127.0.0.1"
+        }:${process.env.PORT || "3002"}`
+    );
+});
+*/
+
+// HTTP Mason server
+const httpMasonServer = createHttpServer();
+handleUpgrade(httpMasonServer);
+httpMasonServer.listen(parseInt(process.env.PORT || "3002"), process.env.HOST || "127.0.0.1", () => {
+    console.log(
+        `[${process.env.SERVER_NAME || "ZRPS"}] Mason is now listening on http://${
+            process.env.HOST || "127.0.0.1"
+        }:${process.env.PORT || "3002"}`
+    );
+});
+
 // Set up a listener for the connection event
 // @ts-ignore
-io.on("connection", (socket) => {
+wss.on("connection", (socket, req) => {
     console.log("A player has connected");
+    
+    const sid = [...crypto.getRandomValues(new Uint8Array(20))].map(n => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[n % 62]).join('');
 
+    socket.id = sid;
     players[socket.id] = {
         loginState: 0,
-        socket,
+        socket: socket,
     };
+    
+    // 1. Engine.IO handshake packet
+    const handshake = `0${JSON.stringify({
+        sid,
+        upgrades: [],
+        pingInterval: 55000,
+        pingTimeout: 120000
+    })}`;
+    console.log("⬅️ From server: ", handshake);
+    socket.send(handshake);
 
+    // 2. Socket.IO connect packet
+    console.log("⬅️ From server: ", "40");
+    socket.send("40");
+    
+    // 3. Handle messages from client
+    socket.on("message", (payload) => {
+        const msg = payload.toString();
+        console.log("➡️ From client:", msg);
+
+        if (msg === "2") { // ping
+            console.log("⬅️ From server: ", "3");
+            socket.send("3"); // pong
+        } else if (msg.startsWith("42")) {
+            const { eventName, eventData } = parseSocketIOMessage(msg);
+            socket.emit(eventName, eventData);
+        } else {
+            console.error("❌ Invalid message:", msg);
+        }
+    });
+
+    // Create Socket.IO event listeners
     socket.on("setPlatform", (platform) => {
         if (!platform) return socket.disconnect(true);
         if (typeof platform !== "string") return socket.disconnect(true);
@@ -90,12 +186,7 @@ io.on("connection", (socket) => {
         const userId = players[socket.id].userData.id;
         const friendCode = players[socket.id].userData.friend_code;
         const connection = await pool.getConnection();
-        connection.execute(
-            "UPDATE users " +
-                "SET status = ?, updated = NOW() " +
-                "WHERE id = ?",
-            [status, userId]
-        );
+        connection.execute("UPDATE users " + "SET status = ?, updated = NOW() " + "WHERE id = ?", [status, userId]);
         // Notify friends
         const [friendIds] = await connection.execute(
             "SELECT u.id " +
@@ -122,7 +213,7 @@ io.on("connection", (socket) => {
         friendIds.forEach((friend) => {
             const player = playersById[friend.id];
             if (player) {
-                player.socket.emit("friendUpdated", updatedFriend[0]);
+                player.socket.send(`42["friendUpdated", ${JSON.stringify(updatedFriend[0])}]`);
             }
         });
         connection.release();
@@ -154,11 +245,9 @@ io.on("connection", (socket) => {
             const fr = rows[0];
             const receiverId = fr.receiver_id;
             delete fr.receiver_id;
-            const receivingPlayer = Object.values(players).find(
-                (p) => p.userData?.id === receiverId
-            );
+            const receivingPlayer = Object.values(players).find((p) => p.userData?.id === receiverId);
             if (receivingPlayer) {
-                receivingPlayer.socket.emit("friendRequestReceived", fr);
+                receivingPlayer.socket.send(`42["friendRequestReceived", ${JSON.stringify(fr)}]`);
             }
         } catch {}
         connection.release();
@@ -201,7 +290,7 @@ io.on("connection", (socket) => {
             );
             // @ts-ignore
             if (friend1.length === 0) return connection.release();
-            socket.emit("friendUpdated", friend1[0]);
+            socket.send(`42["friendUpdated", ${JSON.stringify(friend1[0])}]`);
             const [friend2] = await connection.execute(
                 "SELECT u.id, u.friend_code, u.friend_code as name, u.avatar, u.updated, u.status " +
                     "FROM friends f " +
@@ -211,11 +300,9 @@ io.on("connection", (socket) => {
             );
             // @ts-ignore
             if (friend2.length === 0) return connection.release();
-            const otherPlayer = Object.values(players).find(
-                (p) => p.userData?.id === friend1[0].id
-            );
+            const otherPlayer = Object.values(players).find((p) => p.userData?.id === friend1[0].id);
             if (otherPlayer) {
-                otherPlayer.socket.emit("friendUpdated", friend2[0]);
+                otherPlayer.socket.send(`42["friendUpdated", ${JSON.stringify(friend2[0])}]`);
             }
             connection.release();
         } catch {
@@ -238,9 +325,9 @@ io.on("connection", (socket) => {
         connection.release();
         // @ts-ignore
         if (response[0].affectedRows === 0) return;
-        socket.emit("friendRequestRejected", {
+        socket.send(`42["friendRequestRejected", ${JSON.stringify({
             friend_code: friendCode,
-        });
+        })}]`);
     });
 
     socket.on("deleteFriend", async (friendId) => {
@@ -252,34 +339,25 @@ io.on("connection", (socket) => {
         const userId = players[socket.id].userData.id;
         const connection = await pool.getConnection();
         const [rows] = await connection.execute(
-            "SELECT * from friends " +
-                "WHERE (user_id = ? AND friend_id = ?) OR (friend_id = ? AND user_id = ?)",
+            "SELECT * from friends " + "WHERE (user_id = ? AND friend_id = ?) OR (friend_id = ? AND user_id = ?)",
             [userId, friendId, userId, friendId]
         );
         // @ts-ignore
         if (rows.length === 0) return connection.release();
         const friendEntry = rows[0];
-        const otherId =
-            friendEntry.user_id === userId
-                ? friendEntry.friend_id
-                : friendEntry.user_id;
-        const response = await connection.execute(
-            "DELETE FROM friends " + "WHERE id = ?",
-            [friendEntry.id]
-        );
+        const otherId = friendEntry.user_id === userId ? friendEntry.friend_id : friendEntry.user_id;
+        const response = await connection.execute("DELETE FROM friends " + "WHERE id = ?", [friendEntry.id]);
         connection.release();
         // @ts-ignore
         if (response[0].affectedRows === 0) return;
-        socket.emit("friendDeleted", {
+        socket.send(`42["friendDeleted", ${JSON.stringify({
             id: friendId,
-        });
-        const otherPlayer = Object.values(players).find(
-            (p) => p.userData?.id === otherId
-        );
+        })}]`);
+        const otherPlayer = Object.values(players).find((p) => p.userData?.id === otherId);
         if (otherPlayer) {
-            otherPlayer.socket.emit("friendDeleted", {
+            otherPlayer.socket.send(`42["friendDeleted", ${JSON.stringify({
                 id: userId,
-            });
+            })}]`);
         }
     });
 
@@ -301,12 +379,8 @@ io.on("connection", (socket) => {
                 {
                     id: socket.id,
                     name: players[socket.id].name,
-                    useIp: hashPlayerIp(
-                        socket.request.connection.remoteAddress
-                    ),
-                    isMobile:
-                        players[socket.id].platform === "android" ||
-                        players[socket.id].platform === "ios",
+                    useIp: hashPlayerIp(req.socket.remoteAddress),
+                    isMobile: players[socket.id].platform === "android" || players[socket.id].platform === "ios",
                     inRound: false,
                     ready: false,
                     leader: true,
@@ -314,7 +388,7 @@ io.on("connection", (socket) => {
             ],
         };
         players[socket.id].partyKey = partyKey;
-        socket.emit("partyData", parties[partyKey]);
+        socket.send(`42["partyData", ${JSON.stringify(parties[partyKey])}]`);
     });
 
     socket.on("setPartyVersion", (version) => {
@@ -324,12 +398,10 @@ io.on("connection", (socket) => {
         if (!partyKey) return;
         const party = parties[partyKey];
         if (!party) return;
-        const partyPlayer = party.players.find(
-            (player) => player.id === socket.id
-        );
+        const partyPlayer = party.players.find((player) => player.id === socket.id);
         if (!partyPlayer?.leader) return;
         party.version = version;
-        socket.emit("partyVersionUpdated", version);
+        socket.send(`42["partyVersionUpdated", ${version}]`);
     });
 
     socket.on("setPartyGameMode", (gameMode) => {
@@ -339,12 +411,10 @@ io.on("connection", (socket) => {
         if (!partyKey) return;
         const party = parties[partyKey];
         if (!party) return;
-        const partyPlayer = party.players.find(
-            (player) => player.id === socket.id
-        );
+        const partyPlayer = party.players.find((player) => player.id === socket.id);
         if (!partyPlayer?.leader) return;
         party.gameMode = gameMode;
-        socket.emit("partyGameModeUpdated", gameMode);
+        socket.send(`42["partyGameModeUpdated", ${gameMode}]`);
     });
 
     socket.on("setPartyRegion", (region) => {
@@ -354,28 +424,23 @@ io.on("connection", (socket) => {
         if (!partyKey) return;
         const party = parties[partyKey];
         if (!party) return;
-        const partyPlayer = party.players.find(
-            (player) => player.id === socket.id
-        );
+        const partyPlayer = party.players.find((player) => player.id === socket.id);
         if (!partyPlayer?.leader) return;
         party.region = region;
-        socket.emit("partyRegionUpdated", region);
+        socket.send(`42["partyRegionUpdated", ${region}]`);
     });
 
     socket.on("setPartyAutofill", (autofill) => {
-        if (autofill === undefined || autofill === null)
-            return socket.disconnect(true);
+        if (autofill === undefined || autofill === null) return socket.disconnect(true);
         if (typeof autofill !== "boolean") return socket.disconnect(true);
         const partyKey = players[socket.id].partyKey;
         if (!partyKey) return;
         const party = parties[partyKey];
         if (!party) return;
-        const partyPlayer = party.players.find(
-            (player) => player.id === socket.id
-        );
+        const partyPlayer = party.players.find((player) => player.id === socket.id);
         if (!partyPlayer?.leader) return;
         party.autofill = autofill;
-        socket.emit("partyAutofillUpdated", autofill);
+        socket.send(`42["partyAutofillUpdated", ${autofill}]`);
     });
 
     socket.on("setIsInRound", (isInRound) => {
@@ -384,11 +449,9 @@ io.on("connection", (socket) => {
             const party = parties[partyKey];
             if (party && party.players) {
                 players[socket.id].inRound = isInRound;
-                const index = party.players.findIndex(
-                    (player) => player.id === socket.id
-                );
+                const index = party.players.findIndex((player) => player.id === socket.id);
                 party.players.at(index).inRound = isInRound;
-                socket.emit("partyPlayerUpdated", party.players.at(index));
+                socket.send(`42["partyPlayerUpdated", ${JSON.stringify(party.players.at(index))}]`);
             }
         }
     });
@@ -397,11 +460,11 @@ io.on("connection", (socket) => {
         // Start matchmaking only if every player of the party is ready
         const isReady = players[socket.id].ready;
         if (isReady) {
-            socket.emit("partyStateUpdated", "matchmaking");
+            socket.send(`42["partyStateUpdated", "matchmaking"]`);
             console.log(gameServerDetails);
-            socket.emit("partyJoinServer", gameServerDetails);
-            socket.emit("partyStateUpdated", "ingame");
-            socket.emit("partyStateUpdated", "waiting");
+            socket.send(`42["partyJoinServer", ${gameServerDetails}]`);
+            socket.send(`42["partyStateUpdated", "ingame"]`);
+            socket.send(`42["partyStateUpdated", "waiting"]`);
         }
     });
 
@@ -412,20 +475,18 @@ io.on("connection", (socket) => {
         if (!party) return;
         if (party && party.players) {
             players[socket.id].ready = isReady;
-            const index = party.players.findIndex(
-                (player) => player.id === socket.id
-            );
+            const index = party.players.findIndex((player) => player.id === socket.id);
             party.players.at(index).ready = isReady;
-            socket.emit("partyPlayerUpdated", party.players.at(index));
+            socket.send(`42["partyPlayerUpdated", ${JSON.stringify(party.players.at(index))}]`);
         }
 
         // Start matchmaking only if every player of the party is ready
         if (isReady) {
-            socket.emit("partyStateUpdated", "matchmaking");
+            socket.send(`42["partyStateUpdated", "matchmaking"]`);
             console.log(gameServerDetails);
-            socket.emit("partyJoinServer", gameServerDetails);
-            socket.emit("partyStateUpdated", "ingame");
-            socket.emit("partyStateUpdated", "waiting");
+            socket.send(`42["partyJoinServer", ${gameServerDetails}]`);
+            socket.send(`42["partyStateUpdated", "ingame"]`);
+            socket.send(`42["partyStateUpdated", "waiting"]`);
         }
     });
 
@@ -434,15 +495,13 @@ io.on("connection", (socket) => {
         if (partyKey) {
             const party = parties[partyKey];
             if (party && party.players) {
-                const index = party.players.findIndex(
-                    (player) => player.id === socket.id
-                );
+                const index = party.players.findIndex((player) => player.id === socket.id);
                 if (index !== -1) {
                     party.players.splice(index, 1);
                     if (party.players.length === 0) {
                         delete parties[partyKey];
                     }
-                    socket.emit("partyLeft");
+                    socket.send(`42["partyLeft"]`);
                 }
             }
         }
@@ -459,8 +518,7 @@ io.on("connection", (socket) => {
                 "WHERE id = (SELECT user_id FROM sessions WHERE `key` = ?)",
             [userKey]
         );
-        if (players[socket.id] === null || players[socket.id] === undefined)
-            return;
+        if (players[socket.id] === null || players[socket.id] === undefined) return;
         // @ts-ignore
         if (rows.length === 0) {
             players[socket.id].loginState = 0;
@@ -472,8 +530,8 @@ io.on("connection", (socket) => {
         user.provider = "zrps";
         user.identifier = user.id.toString();
         players[socket.id].userData = user;
-        socket.emit("loggedIn", { userData: user });
-        socket.emit("clansData", []);
+        socket.send(`42["loggedIn", ${JSON.stringify({ userData: user })}]`);
+        socket.send(`42["clansData", ${JSON.stringify([])}]`);
         const [friendRequests] = await connection.execute(
             "SELECT u.friend_code, u.friend_code as name, u.avatar, f.created_at as sent " +
                 "FROM friendreqs f " +
@@ -481,7 +539,7 @@ io.on("connection", (socket) => {
                 "WHERE f.receiver_id = ?",
             [user.id]
         );
-        socket.emit("friendRequests", friendRequests);
+        socket.send(`42["friendRequests", ${JSON.stringify(friendRequests)}]`);
         const [friends] = await connection.execute(
             "SELECT u.id, u.friend_code as name, u.avatar, u.updated, u.status " +
                 "FROM friends f " +
@@ -489,7 +547,7 @@ io.on("connection", (socket) => {
                 "WHERE f.user_id = ? OR f.friend_id = ?",
             [user.id, user.id, user.id, user.id]
         );
-        socket.emit("friendsData", friends);
+        socket.send(`42["friendsData", ${JSON.stringify(friends)}]`);
         connection.release();
     });
 
@@ -505,9 +563,7 @@ io.on("connection", (socket) => {
         if (partyKey) {
             const party = parties[partyKey];
             if (party && party.players) {
-                const index = party.players.findIndex(
-                    (player) => player.id === socket.id
-                );
+                const index = party.players.findIndex((player) => player.id === socket.id);
                 if (index !== -1) {
                     party.players.splice(index, 1);
                     if (party.players.length === 0) {
@@ -519,30 +575,25 @@ io.on("connection", (socket) => {
         await clearUserStatus(socket.id);
         delete players[socket.id];
     });
-});
 
-// Start the server
-server.listen(
-    parseInt(process.env.PORT || "3002"),
-    process.env.HOST || "localhost",
-    () => {
-        console.log(
-            `[${
-                process.env.SERVER_NAME || "ZRPS"
-            }] Mason is now listening on port ${process.env.PORT || "3002"}`
-        );
-    }
-);
+    // Handle errors
+    socket.on("error", (err) => {
+        console.error("Client socket error:", err);
+        socket.close();
+    });
+
+    // Log disconnections
+    socket.on("close", () => {
+        console.log("Client disconnected");
+    });
+});
 
 async function clearUserStatus(socketId) {
     if (players[socketId].loginState !== 2) return;
     const userId = players[socketId].userData.id;
     const friendCode = players[socketId].userData.friend_code;
     const connection = await pool.getConnection();
-    connection.execute(
-        "UPDATE users " + "SET status = ?, updated = NOW() " + "WHERE id = ?",
-        ["offline", userId]
-    );
+    connection.execute("UPDATE users " + "SET status = ?, updated = NOW() " + "WHERE id = ?", ["offline", userId]);
     // Notify friends
     const [friendIds] = await connection.execute(
         "SELECT u.id " +
@@ -569,7 +620,7 @@ async function clearUserStatus(socketId) {
     friendIds.forEach((friend) => {
         const player = playersById[friend.id];
         if (player) {
-            player.socket.emit("friendUpdated", updatedFriend[0]);
+            player.socket.send(`42["friendUpdated", ${JSON.stringify(updatedFriend[0])}]`);
         }
     });
     connection.release();
