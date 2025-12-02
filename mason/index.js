@@ -110,9 +110,9 @@ const httpMasonServer = createHttpServer();
 handleUpgrade(httpMasonServer);
 httpMasonServer.listen(parseInt(process.env.PORT || "3002"), process.env.HOST || "127.0.0.1", () => {
     console.log(
-        `[${process.env.SERVER_NAME || "ZRPS"}] Mason is now listening on http://${
-            process.env.HOST || "127.0.0.1"
-        }:${process.env.PORT || "3002"}`
+        `[${process.env.SERVER_NAME || "ZRPS"}] Mason is now listening on http://${process.env.HOST || "127.0.0.1"}:${
+            process.env.PORT || "3002"
+        }`
     );
 });
 
@@ -120,21 +120,23 @@ httpMasonServer.listen(parseInt(process.env.PORT || "3002"), process.env.HOST ||
 // @ts-ignore
 wss.on("connection", (socket, req) => {
     console.log("A player has connected");
-    
-    const sid = [...crypto.getRandomValues(new Uint8Array(20))].map(n => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[n % 62]).join('');
+
+    const sid = [...crypto.getRandomValues(new Uint8Array(20))]
+        .map((n) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[n % 62])
+        .join("");
 
     socket.id = sid;
     players[socket.id] = {
         loginState: 0,
         socket: socket,
     };
-    
+
     // 1. Engine.IO handshake packet
     const handshake = `0${JSON.stringify({
         sid,
         upgrades: [],
         pingInterval: 55000,
-        pingTimeout: 120000
+        pingTimeout: 120000,
     })}`;
     console.log("⬅️ From server: ", handshake);
     socket.send(handshake);
@@ -142,13 +144,14 @@ wss.on("connection", (socket, req) => {
     // 2. Socket.IO connect packet
     console.log("⬅️ From server: ", "40");
     socket.send("40");
-    
+
     // 3. Handle messages from client
     socket.on("message", (payload) => {
         const msg = payload.toString();
         console.log("➡️ From client:", msg);
 
-        if (msg === "2") { // ping
+        if (msg === "2") {
+            // ping
             console.log("⬅️ From server: ", "3");
             socket.send("3"); // pong
         } else if (msg.startsWith("42")) {
@@ -325,9 +328,11 @@ wss.on("connection", (socket, req) => {
         connection.release();
         // @ts-ignore
         if (response[0].affectedRows === 0) return;
-        socket.send(`42["friendRequestRejected", ${JSON.stringify({
-            friend_code: friendCode,
-        })}]`);
+        socket.send(
+            `42["friendRequestRejected", ${JSON.stringify({
+                friend_code: friendCode,
+            })}]`
+        );
     });
 
     socket.on("deleteFriend", async (friendId) => {
@@ -350,14 +355,18 @@ wss.on("connection", (socket, req) => {
         connection.release();
         // @ts-ignore
         if (response[0].affectedRows === 0) return;
-        socket.send(`42["friendDeleted", ${JSON.stringify({
-            id: friendId,
-        })}]`);
+        socket.send(
+            `42["friendDeleted", ${JSON.stringify({
+                id: friendId,
+            })}]`
+        );
         const otherPlayer = Object.values(players).find((p) => p.userData?.id === otherId);
         if (otherPlayer) {
-            otherPlayer.socket.send(`42["friendDeleted", ${JSON.stringify({
-                id: userId,
-            })}]`);
+            otherPlayer.socket.send(
+                `42["friendDeleted", ${JSON.stringify({
+                    id: userId,
+                })}]`
+            );
         }
     });
 
@@ -462,7 +471,7 @@ wss.on("connection", (socket, req) => {
         if (isReady) {
             socket.send(`42["partyStateUpdated", "matchmaking"]`);
             console.log(gameServerDetails);
-            socket.send(`42["partyJoinServer", ${gameServerDetails}]`);
+            socket.send(`42["partyJoinServer", ${JSON.stringify(gameServerDetails)}]`);
             socket.send(`42["partyStateUpdated", "ingame"]`);
             socket.send(`42["partyStateUpdated", "waiting"]`);
         }
@@ -484,7 +493,7 @@ wss.on("connection", (socket, req) => {
         if (isReady) {
             socket.send(`42["partyStateUpdated", "matchmaking"]`);
             console.log(gameServerDetails);
-            socket.send(`42["partyJoinServer", ${gameServerDetails}]`);
+            socket.send(`42["partyJoinServer", ${JSON.stringify(gameServerDetails)}]`);
             socket.send(`42["partyStateUpdated", "ingame"]`);
             socket.send(`42["partyStateUpdated", "waiting"]`);
         }
