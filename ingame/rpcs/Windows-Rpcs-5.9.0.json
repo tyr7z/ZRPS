@@ -226,7 +226,7 @@
                     "Offset": 40,
                     "Type": 2,
                     "XFieldName": "OEPDGAOAGPO",
-                    "FieldName": null
+                    "FieldName": "shieldDamage"
                 },
                 {
                     "InternalIndex": 1,
@@ -402,7 +402,7 @@
                     "Offset": 20,
                     "Type": 2,
                     "XFieldName": "PKCOHLMCGNI",
-                    "FieldName": null
+                    "FieldName": "x"
                 },
                 {
                     "InternalIndex": 0,
@@ -1364,8 +1364,8 @@
                     "NameHash": 1726718247,
                     "Offset": 70,
                     "Type": 2,
-                    "XFieldName": null,
-                    "FieldName": null
+                    "XFieldName": "BGHLDDGKCGF",
+                    "FieldName": "maxPing"
                 },
                 {
                     "InternalIndex": 12,
@@ -1739,8 +1739,8 @@
                     "NameHash": 2365320079,
                     "Offset": 42,
                     "Type": 2,
-                    "XFieldName": null,
-                    "FieldName": null
+                    "XFieldName": "FHFNLFLALNO",
+                    "FieldName": "yaw"
                 }
             ],
             "XClassName": "OIBEGCKIJCD",
@@ -2334,8 +2334,8 @@
                     "NameHash": 3385293846,
                     "Offset": 38,
                     "Type": 2,
-                    "XFieldName": null,
-                    "FieldName": null
+                    "XFieldName": "ACJKGAAOHGA",
+                    "FieldName": "y"
                 },
                 {
                     "InternalIndex": 2,
