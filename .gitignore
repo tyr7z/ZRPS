@@ -11,7 +11,8 @@ lerna-debug.log*
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Runtime data
-**package-lock.json
+pnpm-lock.yaml
+package-lock.json
 pids
 *.pid
 *.seed

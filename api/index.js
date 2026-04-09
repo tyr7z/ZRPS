@@ -1,28 +1,22 @@
 // Import core dependencies
-import fastify from "fastify";
-import mysql from "@fastify/mysql";
-import cors from "@fastify/cors";
-import cookie from "@fastify/cookie";
-import formbody from "@fastify/formbody";
-import view from "@fastify/view";
-import _static from "@fastify/static";
+import express from "express";
+import mysql from "mysql2/promise";
+import cors from "cors";
+import cookieParser from "cookie-parser";
 import path, { dirname } from "path";
 import * as dotenv from "dotenv";
 import * as url from "url";
-import pug from "pug";
 import fs from "fs";
 
 // Load environment config
 dotenv.config();
 
 // Create web server
-const app = fastify({
-    // logger: true,
-});
+const app = express();
+app.set("trust proxy", true);
 
 // Create MySQL pool connection
 const mysqlOptions = {
-    promise: true,
     host: process.env.DATABASE_HOST || "127.0.0.1",
     port: parseInt(process.env.DATABASE_PORT || "3306"),
     user: process.env.DATABASE_USER || "root",
@@ -34,48 +28,130 @@ if (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED?.toLowerCase() === "true") {
         rejectUnauthorized: true,
     };
 }
-app.register(mysql, mysqlOptions);
-
-// Register miscellaneous plugins
-app.addContentTypeParser("*", (_req, _payload, done) => done(null));
-app.register(cors);
-app.register(formbody);
-app.register(cookie, {
-    secret: process.env.COOKIE_SECRET || "my-secret",
-});
-app.register(view, {
-    engine: {
-        pug,
+const pool = mysql.createPool(mysqlOptions);
+app.mysql = {
+    async getConnection() {
+        return pool.getConnection();
     },
+};
+
+// Register middleware and view engine
+app.use(cors());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(cookieParser(process.env.COOKIE_SECRET || "my-secret"));
+
+const __dirname = dirname(url.fileURLToPath(import.meta.url));
+app.set("views", __dirname);
+app.set("view engine", "pug");
+
+app.use((req, res, next) => {
+    req.unsignCookie = (value) => {
+        const unsigned = cookieParser.signedCookie(
+            value,
+            process.env.COOKIE_SECRET || "my-secret"
+        );
+        return {
+            valid: unsigned !== false,
+            value: unsigned !== false ? unsigned : null,
+        };
+    };
+
+    res.view = (viewPath, locals) => res.render(viewPath, locals);
+    res.code = (statusCode) => res.status(statusCode);
+
+    const originalCookie = res.cookie.bind(res);
+    res.cookie = (name, value, options = {}) => {
+        const normalizedOptions = { ...options };
+
+        if (
+            typeof normalizedOptions.maxAge === "number" &&
+            normalizedOptions.maxAge > 0 &&
+            normalizedOptions.maxAge < 1000 * 60 * 60 * 24 * 365
+        ) {
+            normalizedOptions.maxAge *= 1000;
+        }
+
+        if (typeof normalizedOptions.expires === "number") {
+            normalizedOptions.expires = new Date(normalizedOptions.expires);
+        }
+
+        if (normalizedOptions.secure === "auto") {
+            normalizedOptions.secure =
+                req.secure ||
+                req.headers["x-forwarded-proto"] === "https";
+        }
+
+        return originalCookie(name, value, normalizedOptions);
+    };
+
+    next();
 });
+
+function createCompatibleRouter(server, prefix = "") {
+    const normalizePath = (routePath) => {
+        if (!routePath || routePath === "/") {
+            return prefix || "/";
+        }
+
+        const joined = `${prefix}${routePath}`.replace(/\/+/g, "/");
+        return joined.startsWith("/") ? joined : `/${joined}`;
+    };
+
+    const registerRoute = (method, routePath, handler) => {
+        server[method](normalizePath(routePath), async (req, res, next) => {
+            try {
+                const result = await handler(req, res, next);
+                if (!res.headersSent && result !== undefined) {
+                    res.send(result);
+                }
+            } catch (error) {
+                next(error);
+            }
+        });
+    };
+
+    return {
+        mysql: app.mysql,
+        get(routePath, handler) {
+            registerRoute("get", routePath, handler);
+        },
+        post(routePath, handler) {
+            registerRoute("post", routePath, handler);
+        },
+    };
+}
 
 // Register routes
-const __dirname = dirname(url.fileURLToPath(import.meta.url));
 const routesPath = path.join(__dirname, "routes");
-for (const file of fs.readdirSync(routesPath).filter(f => f.endsWith(".js"))) {
+for (const file of fs.readdirSync(routesPath).filter((f) => f.endsWith(".js"))) {
     const route = await import(new URL(file, url.pathToFileURL(routesPath + path.sep)));
-    if ("prefix" in route) {
-        app.register(route, { prefix: route.prefix });
-    }
+    const prefix = "prefix" in route ? route.prefix : "";
+    const router = createCompatibleRouter(app, prefix);
+    await route.default(router);
 }
 
 // Serve static content
-app.register(_static, {
-    root: path.join(__dirname, "public"),
+app.use(express.static(path.join(__dirname, "public")));
+
+app.use((err, _req, res, _next) => {
+    console.error(err);
+    if (res.headersSent) {
+        return;
+    }
+
+    res.status(500).send({
+        status: "error",
+        message: "Internal server error",
+    });
 });
 
 // Start web server
-app.listen(
-    {
-        port: parseInt(process.env.PORT || "3001"),
-        host: process.env.HOST || "localhost",
-    },
-    (err, address) => {
-        if (err) throw err;
-        console.log(
-            `[${
-                process.env.SERVER_NAME || "ZRPS"
-            }] API is now listening on ${address}`
-        );
-    }
-);
+const port = parseInt(process.env.PORT || "3001");
+const host = process.env.HOST || "localhost";
+
+app.listen(port, host, () => {
+    console.log(
+        `[${process.env.SERVER_NAME || "ZRPS"}] API is now listening on http://${host}:${port}`
+    );
+});
